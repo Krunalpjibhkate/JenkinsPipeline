@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+    stages {
+        stage("git checkout") {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '', url: 'https://github.com/Krunalpjibhkate/Taskjenkins.git']]])     
+            }
+        }  
+        stage("docker build & push ") {
+            steps {
+                sh ''' 
+                docker build -t demo .
+                docker tag demo 339712867708.dkr.ecr.eu-west-2.amazonaws.com/devops:$BUILD_ID
+                aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin 339712867708.dkr.ecr.eu-west-2.amazonaws.com
+                docker push 339712867708.dkr.ecr.eu-west-2.amazonaws.com/devops:$BUILD_ID
+                docker system prune -a -f 
+                '''
+            }
+        }
+        stage("manifest") {
+            steps {
+                 checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Krunalpjibhkate/JenkinsManifest.git']])
+                 sh ''' ls -al '''
+            }
+        }
+        stage("update image") {
+            steps {
+                 sh ' sed -i "s/latest/$BUILD_ID/" deployment.yaml'
+            }
+
+        }
+        stage("git push") {
+            steps {
+                 withCredentials([gitUsernamePassword(credentialsId: 'Jenkins-push', gitToolName: 'Default')]) {
+               sh ''' git config --global user.name "Krunalpjibhkate"
+                git config --global user.email "Krunaljibhkate26@gmail.com"
+                git init
+                git add .
+                git checkout -b main
+                git commit -m 'update image'
+                git push origin main
+                '''
+                }
+            }
+
+        }
+        
+    }
+
+}
